@@ -2,10 +2,10 @@
 #include <WebServer.h>
 #include <WebSocketsServer.h>
 
-// ประกาศ prototype ก่อน setup()
+// ประกาศ prototype
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length);
 
-// HTML + JavaScript (ต้องอยู่ก่อน setup())
+// HTML + JavaScript
 const char htmlPage[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en">
@@ -60,18 +60,19 @@ const char htmlPage[] PROGMEM = R"rawliteral(
     let timeElapsed = 0;
     let gameRunning = false;
     let timerInterval;
-    let gameSpeed = 150; // ความเร็วเกมเริ่มต้น
+    let gameSpeed = 200;
 
     let socket = new WebSocket("ws://" + location.host + ":81/");
     socket.onmessage = function(event) {
-        let [vx, vy] = event.data.split(",").map(Number);
-        if (vx < -50) direction = "LEFT";
-        else if (vx > 50) direction = "RIGHT";
-        if (vy < -50) direction = "UP";
-        else if (vy > 50) direction = "DOWN";
+        let newDirection = event.data;
+        if ((direction === "RIGHT" && newDirection !== "LEFT") ||
+            (direction === "LEFT" && newDirection !== "RIGHT") ||
+            (direction === "UP" && newDirection !== "DOWN") ||
+            (direction === "DOWN" && newDirection !== "UP")) {
+            direction = newDirection;
+        }
     };
 
-    // ฟังก์ชันเริ่มเกม รีเซ็ตค่าต่าง ๆ และเริ่มการนับถอยหลังก่อนเริ่มเล่น
     const startGame = () => {
         startButton.style.display = "none";
         score = 0;
@@ -81,7 +82,7 @@ const char htmlPage[] PROGMEM = R"rawliteral(
         snake = [{ x: 200, y: 200 }];
         direction = "RIGHT";
         gameRunning = false;
-        gameSpeed = 150;
+        gameSpeed = 200;
 
         countdownDisplay.style.display = "block";
         countdownDisplay.innerText = "3";
@@ -100,7 +101,6 @@ const char htmlPage[] PROGMEM = R"rawliteral(
         }, 3000);
     };
 
-    // ฟังก์ชันหลักสำหรับอัปเดตสถานะของเกม เช่น การเคลื่อนที่ของงูและการตรวจสอบการกินอาหาร
     const updateGame = () => {
         if (!gameRunning) return;
 
@@ -125,8 +125,7 @@ const char htmlPage[] PROGMEM = R"rawliteral(
             scoreDisplay.innerText = "Score: " + score;
             food = { x: Math.floor(Math.random() * 20) * 20, y: Math.floor(Math.random() * 20) * 20 };
             
-            // เงื่อนไขเมื่อคะแนนถึง 30 เพื่อให้เกมหยุดหลังจากงูกินอาหารสุดท้าย
-            if (score === 30) {
+            if (score === 20) {
                 drawGame();
                 setTimeout(() => {
                     gameRunning = false;
@@ -137,15 +136,15 @@ const char htmlPage[] PROGMEM = R"rawliteral(
                 return;
             }
 
-            // สร้างเงื่อนไข ความเร็วเกม ถ้า score <= 10 ให้ gameSpeed = 150, <= 20 gameSpeed = 120, <= 30 gameSpeed = 100
-            // CODE HERE...
+            if (score <= 10) gameSpeed = 200;
+            else if (score <= 15) gameSpeed = 170;
+            else if (score <= 20) gameSpeed = 150;
         }
 
         drawGame();
         setTimeout(updateGame, gameSpeed);
     };
 
-    // ฟังก์ชันวาดกราฟิกของเกมบน canvas รวมถึงตัวงูและอาหาร
     const drawGame = () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "red";
@@ -175,26 +174,31 @@ WebSocketsServer webSocket(81);
 
 const int xPin = 34;  // VRX pin
 const int yPin = 35;  // VRY pin
+const int deadzone = 20;  // Deadzone เพื่อลด noise
+
+String lastDirection = "RIGHT"; // เก็บทิศทางล่าสุด
 
 void setup() {
   Serial.begin(115200);
+  Serial.println("Setup started"); // Debug
 
-  // ตั้งค่า WiFi เป็น Access Point
   WiFi.softAP(ssid, password);
-  Serial.println("WiFi AP Started!");
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(IP);
 
-  // ตั้งค่า Web Server
   server.on("/", []() {
+    Serial.println("Serving HTML page"); // Debug
     server.send_P(200, "text/html", htmlPage);
   });
   server.begin();
+  Serial.println("Web server started");
   
-  // ตั้งค่า WebSocket
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
+  Serial.println("WebSocket server started");
 }
 
-// Handle WebSocket Events
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
   if (type == WStype_CONNECTED) {
     Serial.println("WebSocket Connected");
@@ -205,22 +209,51 @@ void loop() {
   server.handleClient();
   webSocket.loop();
 
-  int xValue = analogRead(xPin);
-  int yValue = analogRead(yPin);
+  int xSum = 0, ySum = 0;
+  const int samples = 5;
+  for (int i = 0; i < samples; i++) {
+    xSum += analogRead(xPin);
+    ySum += analogRead(yPin);
+    delay(2);
+  }
+  
+  int xValue = xSum / samples;
+  int yValue = ySum / samples;
 
-  // Map ค่าจาก 0-4095 ให้เป็นช่วง -100 ถึง 100
   int vx = map(xValue, 0, 4095, -100, 100);
   int vy = map(yValue, 0, 4095, -100, 100);
 
-  // Debug ค่า vx, vy บน Serial Monitor
+  if (abs(vx) < deadzone) vx = 0;
+  if (abs(vy) < deadzone) vy = 0;
+
+  String newDirection = lastDirection;
+
+  if (abs(vx) > abs(vy) && abs(vx) >= 30) {
+    newDirection = (vx > 0) ? "RIGHT" : "LEFT";
+  } else if (abs(vy) >= 30) {
+    newDirection = (vy > 0) ? "DOWN" : "UP";
+  }
+
+  // ตรวจสอบไม่ให้เปลี่ยนทิศทางเป็นตรงข้าม
+  if (!((lastDirection == "RIGHT" && newDirection == "LEFT") ||
+        (lastDirection == "LEFT" && newDirection == "RIGHT") ||
+        (lastDirection == "UP" && newDirection == "DOWN") ||
+        (lastDirection == "DOWN" && newDirection == "UP"))) {
+    
+    if (newDirection != lastDirection) { // ถ้ามีการเปลี่ยนทิศ
+      lastDirection = newDirection;
+      String message = newDirection;
+      webSocket.broadcastTXT(message);
+      Serial.print("Direction sent: "); // Debug
+      Serial.println(newDirection);
+    }
+  }
+
+  // พิมพ์ค่า vx, vy เพื่อ debug
   Serial.print("vx: ");
   Serial.print(vx);
   Serial.print(" | vy: ");
   Serial.println(vy);
 
-  // ส่งค่าไปที่ WebSocket
-  String message = String(vx) + "," + String(vy);
-  webSocket.broadcastTXT(message);
-
-  delay(100);  // ควบคุมอัตราการอัปเดต
+  delay(50);
 }
