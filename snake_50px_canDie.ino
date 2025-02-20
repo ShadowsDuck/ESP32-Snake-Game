@@ -54,21 +54,20 @@ const char htmlPage[] PROGMEM = R"rawliteral(
     const countdownDisplay = document.getElementById("countdown");
 
     let snake = [{ x: 200, y: 200 }];
-    let direction = "RIGHT";
 
     const generateFoodPosition = () => {
-    let newFood;
-    let isOnSnake;
-    do {
-        newFood = {
-            x: Math.floor(Math.random() * 20) * 20,
-            y: Math.floor(Math.random() * 20) * 20
-        };
-        isOnSnake = snake.some(segment => segment.x === newFood.x && segment.y === newFood.y);
-    } while (isOnSnake);
-      return newFood;
+        let newFood;
+        let isOnSnake;
+        do {
+            newFood = {
+                x: Math.floor(Math.random() * 20) * 20,
+                y: Math.floor(Math.random() * 20) * 20
+            };
+            isOnSnake = snake.some(segment => segment.x === newFood.x && segment.y === newFood.y);
+        } while (isOnSnake);
+        return newFood;
     };
-    food = generateFoodPosition();
+    let food = generateFoodPosition();
 
     let score = 0;
     let timeElapsed = 0;
@@ -76,6 +75,8 @@ const char htmlPage[] PROGMEM = R"rawliteral(
     let timerInterval;
     let gameSpeed = 200;
 
+    let direction = "RIGHT";
+    let nextDirection = "RIGHT"; // ตัวแปรใหม่สำหรับคิวทิศทาง
     let socket = new WebSocket("ws://" + location.host + ":81/");
     socket.onmessage = function(event) {
         let newDirection = event.data;
@@ -83,7 +84,7 @@ const char htmlPage[] PROGMEM = R"rawliteral(
             (direction === "LEFT" && newDirection !== "RIGHT") ||
             (direction === "UP" && newDirection !== "DOWN") ||
             (direction === "DOWN" && newDirection !== "UP")) {
-            direction = newDirection;
+            nextDirection = newDirection; // เก็บทิศทางใหม่ไว้ในคิว
         }
     };
 
@@ -95,6 +96,7 @@ const char htmlPage[] PROGMEM = R"rawliteral(
         timerDisplay.innerText = "Time: 0s";
         snake = [{ x: 200, y: 200 }];
         direction = "RIGHT";
+        nextDirection = "RIGHT"; // รีเซ็ตคิวทิศทาง
         gameRunning = false;
         gameSpeed = 200;
 
@@ -118,6 +120,9 @@ const char htmlPage[] PROGMEM = R"rawliteral(
     const updateGame = () => {
         if (!gameRunning) return;
 
+        // อัปเดตทิศทางจากคิว
+        direction = nextDirection;
+
         let head = { ...snake[0] };
         if (direction === "LEFT") head.x -= 20;
         if (direction === "RIGHT") head.x += 20;
@@ -129,7 +134,7 @@ const char htmlPage[] PROGMEM = R"rawliteral(
         if (head.y < 0) head.y = canvas.height - 20;
         else if (head.y >= canvas.height) head.y = 0;
 
-        // ตรวจสอบว่าหัวงูชนหางหรือไม่
+        // ตรวจสอบการชนหาง
         for (let i = 1; i < snake.length; i++) {
             if (head.x === snake[i].x && head.y === snake[i].y) {
                 gameRunning = false;
@@ -237,6 +242,9 @@ void loop() {
   server.handleClient();
   webSocket.loop();
 
+  static unsigned long lastSentTime = 0;
+  const unsigned long sendInterval = 150; // ส่งทุก 150ms เท่านั้น (ปรับตาม gameSpeed)
+
   int xSum = 0, ySum = 0;
   const int samples = 5;
   for (int i = 0; i < samples; i++) {
@@ -256,29 +264,28 @@ void loop() {
 
   String newDirection = lastDirection;
 
-  // เปลี่ยน threshold จาก 30 เป็น 50
   if (abs(vx) > abs(vy) && abs(vx) >= 50) {
     newDirection = (vx > 0) ? "RIGHT" : "LEFT";
   } else if (abs(vy) >= 50) {
     newDirection = (vy > 0) ? "DOWN" : "UP";
   }
 
-  // ตรวจสอบไม่ให้เปลี่ยนทิศทางเป็นตรงข้าม
+  unsigned long currentTime = millis();
   if (!((lastDirection == "RIGHT" && newDirection == "LEFT") ||
         (lastDirection == "LEFT" && newDirection == "RIGHT") ||
         (lastDirection == "UP" && newDirection == "DOWN") ||
         (lastDirection == "DOWN" && newDirection == "UP"))) {
     
-    if (newDirection != lastDirection) { // ถ้ามีการเปลี่ยนทิศ
+    if (newDirection != lastDirection && (currentTime - lastSentTime >= sendInterval)) { 
       lastDirection = newDirection;
       String message = newDirection;
       webSocket.broadcastTXT(message);
-      Serial.print("Direction sent: "); // Debug
+      lastSentTime = currentTime; // อัปเดตเวลาที่ส่งล่าสุด
+      Serial.print("Direction sent: ");
       Serial.println(newDirection);
     }
   }
 
-  // พิมพ์ค่า vx, vy เพื่อ debug
   Serial.print("vx: ");
   Serial.print(vx);
   Serial.print(" | vy: ");
