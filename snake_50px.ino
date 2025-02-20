@@ -55,7 +55,21 @@ const char htmlPage[] PROGMEM = R"rawliteral(
 
     let snake = [{ x: 200, y: 200 }];
     let direction = "RIGHT";
-    let food = { x: Math.floor(Math.random() * 20) * 20, y: Math.floor(Math.random() * 20) * 20 };
+
+    const generateFoodPosition = () => {
+    let newFood;
+    let isOnSnake;
+    do {
+        newFood = {
+            x: Math.floor(Math.random() * 20) * 20,
+            y: Math.floor(Math.random() * 20) * 20
+        };
+        isOnSnake = snake.some(segment => segment.x === newFood.x && segment.y === newFood.y);
+    } while (isOnSnake);
+      return newFood;
+    };
+    food = generateFoodPosition();
+
     let score = 0;
     let timeElapsed = 0;
     let gameRunning = false;
@@ -123,7 +137,7 @@ const char htmlPage[] PROGMEM = R"rawliteral(
         } else {
             score += 1;
             scoreDisplay.innerText = "Score: " + score;
-            food = { x: Math.floor(Math.random() * 20) * 20, y: Math.floor(Math.random() * 20) * 20 };
+            food = generateFoodPosition();
             
             if (score === 20) {
                 drawGame();
