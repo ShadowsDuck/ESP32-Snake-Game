@@ -201,8 +201,8 @@ const char htmlPage[] PROGMEM = R"rawliteral(
 )rawliteral";
 
 // WiFi AP Config
-const char* ssid = "www"; // ตั้งเองเลย
-const char* password = "12345678"; // ตั้งเองเลย
+const char* ssid = "Your-Wifi-Name"; // ตั้งเองเลย
+const char* password = "Your-Wifi-Password"; // ตั้งเองเลย
 
 WebServer server(80);
 WebSocketsServer webSocket(81);
