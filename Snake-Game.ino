@@ -160,13 +160,11 @@ const char htmlPage[] PROGMEM = R"rawliteral(
             food = generateFoodPosition();
             
             if (score === 20) {
+                gameRunning = false;
+                clearInterval(timerInterval);
                 drawGame();
-                setTimeout(() => {
-                    gameRunning = false;
-                    clearInterval(timerInterval);
-                    timerDisplay.innerText = `🎉 You Win! 🎉 Time: ${timeElapsed}s`;
-                    startMessage.style.display = "block"; // แสดงข้อความเริ่มต้นอีกครั้ง
-                }, 100);
+                timerDisplay.innerText = `🎉 You Win! 🎉 Time: ${timeElapsed}s`;
+                startMessage.style.display = "block";
                 return;
             }
 
@@ -203,8 +201,8 @@ const char htmlPage[] PROGMEM = R"rawliteral(
 )rawliteral";
 
 // WiFi AP Config
-const char* ssid = "Your-Wifi-Name"; // ตั้งเองเลย
-const char* password = "Your-Wifi-Password"; // ตั้งเองเลย
+const char* ssid = "www"; // ตั้งเองเลย
+const char* password = "12345678"; // ตั้งเองเลย
 
 WebServer server(80);
 WebSocketsServer webSocket(81);
