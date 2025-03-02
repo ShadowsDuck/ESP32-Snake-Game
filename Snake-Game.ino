@@ -255,7 +255,8 @@ void loop() {
   int buttonState = digitalRead(swPin);
   if (lastButtonState == HIGH && buttonState == LOW) { // ตรวจจับการกดปุ่ม (ขอบลง)
     webSocket.broadcastTXT("START");
-    Serial.println("Start button pressed");
+    lastDirection = "RIGHT"; // รีเซ็ต lastDirection เป็น RIGHT เมื่อเริ่มเกมใหม่
+    Serial.println("Start button pressed, lastDirection reset to RIGHT");
   }
   lastButtonState = buttonState;
 
